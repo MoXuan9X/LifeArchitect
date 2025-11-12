@@ -27,18 +27,18 @@ const featureCards: Feature[] = [
 
 export default function Features() {
   return (
-    <section id="features" className="relative z-10 px-6 pb-16 pt-10 lg:px-8">
+    <section id="features" className="relative z-10 px-6 pb-16 pt-10 lg:px-8 ">
       <div className="mx-auto grid max-w-5xl gap-8 md:grid-cols-3">
         {featureCards.map((feature) => (
           <div
             key={feature.title}
-            className="rounded-2xl border border-white/10 bg-white/5 p-6 text-left"
+            className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-6 text-left"
           >
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-200">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-200">
               {feature.title}
             </p>
-            <p className="mt-3 text-lg font-semibold text-white">{feature.subtitle}</p>
-            <p className="mt-2 text-sm text-gray-300">{feature.description}</p>
+            <p className="mt-3 text-lg font-semibold text-gray-900 dark:text-white">{feature.subtitle}</p>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{feature.description}</p>
           </div>
         ))}
       </div>
