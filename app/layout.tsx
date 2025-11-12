@@ -1,13 +1,11 @@
 import './globals.css';
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import { Toaster } from '@/components/ui/toaster';
 
-const inter = Inter({ subsets: ['latin'] });
-
 export const metadata: Metadata = {
-  title: '安心睡眠伙伴 - 你的睡前思绪整理助手',
-  description: '帮助你通过睡前对话整理思绪，促进安心入睡',
+  title: 'AI逆袭师 - 7天重启人生',
+  description:
+    'AI逆袭师通过对话、复盘与任务指南帮助你清晰当下困境并规划重启道路',
   icons: {
     icon: '/site-icon.png',
     shortcut: '/site-icon.png',
@@ -23,6 +21,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <head>
+        <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
         {/* Privacy-friendly analytics by Plausible */}
         <script
           async
@@ -50,7 +49,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={inter.className}>
+      <body className="font-sans">
         {children}
         <Toaster />
       </body>
