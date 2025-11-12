@@ -1,313 +1,151 @@
-'use client'
+import Link from 'next/link'
 
-import { useEffect, useState } from 'react'
-import Image from 'next/image'
-import { ChatBox } from '@/components/ChatBox'
-import { RecordsPanel } from '@/components/RecordsPanel'
-import { AppState, Message, INITIAL_STATE } from '@/lib/types'
-import { loadState, saveState, clearState, getTodayDateKey } from '@/lib/storage'
-import { streamChatResponse, classifyMessage } from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import { useToast } from '@/hooks/use-toast'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
-
-const GREETING_MESSAGE = '你好！我是小安，可以在睡前帮你把脑子里盘旋的事情安顿好，让你轻松入睡。请问怎么称呼你呢？'
-
-export default function Home() {
-  const [state, setState] = useState<AppState>(INITIAL_STATE)
-  const [isLoading, setIsLoading] = useState(false)
-  const [showRecords, setShowRecords] = useState(false)
-  const { toast } = useToast()
-
-  useEffect(() => {
-    const savedState = loadState()
-
-    if (savedState.conversationHistory.length === 0) {
-      const greetingMessage: Message = {
-        role: 'assistant',
-        content: GREETING_MESSAGE,
-        timestamp: Date.now()
-      }
-      const newState: AppState = {
-        ...savedState,
-        conversationHistory: [greetingMessage],
-        lastSessionDate: getTodayDateKey()
-      }
-      setState(newState)
-      saveState(newState)
-    } else {
-      setState(savedState)
-    }
-  }, [])
-
-  const mergeCategories = (existing: string[], newItems: string[]): string[] => {
-    const merged = existing.filter(item => item && item.trim()).map(item => item.trim())
-    newItems.forEach(item => {
-      if (item && item.trim() && !merged.includes(item.trim())) {
-        merged.push(item.trim())
-      }
-    })
-    return merged
-  }
-
-  const handleSendMessage = async (message: string) => {
-    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-    const typingDelayFor = (char: string) => {
-      if (char === ' ' || char === '\n') return 0
-      return 18
-    }
-
-    const userMessage: Message = {
-      role: 'user',
-      content: message,
-      timestamp: Date.now()
-    }
-
-    const typingPlaceholder: Message = {
-      role: 'assistant',
-      content: '',
-      timestamp: Date.now(),
-      isStreaming: true
-    }
-
-    let historyForRequest: Message[] = []
-
-    setState(prev => {
-      const historyWithUser = [...prev.conversationHistory, userMessage]
-      historyForRequest = historyWithUser
-      return {
-        ...prev,
-        conversationHistory: [...historyWithUser, typingPlaceholder],
-        lastSessionDate: getTodayDateKey()
-      }
-    })
-
-    setIsLoading(true)
-
-    const classificationPromise = classifyMessage(message).catch(error => {
-      console.error('Error classifying message:', error)
-      return {
-        pendingThings: [],
-        happyThings: [],
-        gratefulThings: []
-      }
-    })
-
-    try {
-      let streamedContent = ''
-
-      const updateStreamingMessage = (content: string, isStreaming: boolean) => {
-        setState(prev => {
-          const history = [...prev.conversationHistory]
-          const lastIndex = history.length - 1
-
-          if (lastIndex >= 0 && history[lastIndex].role === 'assistant') {
-            history[lastIndex] = {
-              ...history[lastIndex],
-              content,
-              isStreaming,
-              timestamp: history[lastIndex].timestamp
-            }
-          }
-
-          return {
-            ...prev,
-            conversationHistory: history
-          }
-        })
-      }
-
-      const requestHistory = historyForRequest.length
-        ? historyForRequest
-        : [...state.conversationHistory, userMessage]
-
-      const assistantResponse = await streamChatResponse(requestHistory, async delta => {
-        for (const char of delta) {
-          streamedContent += char
-          updateStreamingMessage(streamedContent, true)
-          const delay = typingDelayFor(char)
-          if (delay > 0) {
-            await sleep(delay)
-          }
-        }
-      })
-
-      updateStreamingMessage(assistantResponse, false)
-
-      const classification = await classificationPromise
-
-      setState(prev => {
-        const todayKey = getTodayDateKey()
-        const history = [...prev.conversationHistory]
-        const lastIndex = history.length - 1
-
-        if (lastIndex >= 0 && history[lastIndex].role === 'assistant') {
-          history[lastIndex] = {
-            ...history[lastIndex],
-            content: assistantResponse,
-            isStreaming: false,
-            timestamp: Date.now()
-          }
-        }
-
-        const newState: AppState = {
-          conversationHistory: history,
-          categories: {
-            pendingThings: mergeCategories(prev.categories.pendingThings, classification.pendingThings),
-            happyThings: mergeCategories(prev.categories.happyThings, classification.happyThings),
-            gratefulThings: mergeCategories(prev.categories.gratefulThings, classification.gratefulThings)
-          },
-          conversationProgress: prev.conversationProgress,
-          lastSessionDate: todayKey
-        }
-
-        saveState(newState)
-        return newState
-      })
-    } catch (error) {
-      console.error('Error sending message:', error)
-      setState(prev => {
-        const history = [...prev.conversationHistory]
-        const lastIndex = history.length - 1
-
-        if (lastIndex >= 0 && history[lastIndex].role === 'assistant') {
-          history[lastIndex] = {
-            role: 'assistant',
-            content: '抱歉，我遇到了一些问题，请再说一次好吗？',
-            timestamp: Date.now()
-          }
-        }
-
-        const newState: AppState = {
-          conversationHistory: history,
-          categories: prev.categories,
-          conversationProgress: prev.conversationProgress,
-          lastSessionDate: getTodayDateKey()
-        }
-
-        saveState(newState)
-        return newState
-      })
-      toast({
-        title: '发送失败',
-        description: '网络连接出现问题，请检查网络后重试',
-        variant: 'destructive'
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleReset = () => {
-    clearState()
-
-    const greetingMessage: Message = {
-      role: 'assistant',
-      content: GREETING_MESSAGE,
-      timestamp: Date.now()
-    }
-
-    const newState: AppState = {
-      ...INITIAL_STATE,
-      conversationHistory: [greetingMessage],
-      lastSessionDate: getTodayDateKey()
-    }
-
-    setState(newState)
-    saveState(newState)
-    setShowRecords(false)
-
-    toast({
-      title: '已开始新会话',
-      description: '之前的对话已清空'
-    })
-  }
-
+export default function HomePage() {
   return (
-    <div className="flex flex-col h-screen bg-white">
-      <header className="border-b px-4 py-4 flex items-center justify-between bg-white">
-        <div className="flex items-center gap-2">
-          <Image
-            src="/site-icon.png"
-            alt="安心睡眠伙伴图标"
-            width={32}
-            height={32}
-            className="rounded-md"
-            priority
+    <div className="bg-gray-900 text-white min-h-screen">
+      <div className="relative isolate overflow-hidden px-6 py-6 lg:px-8 min-h-[90vh] flex flex-col">
+        <div className="absolute inset-x-0 top-[-10rem] -z-10 transform-gpu blur-3xl">
+          <div
+            className="mx-auto aspect-[1155/678] w-[72.1875rem] bg-gradient-to-tr from-[#ff80b5] to-[#9089fc] opacity-40"
+            style={{
+              clipPath:
+                'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)'
+            }}
           />
-          <h1 className="text-xl font-semibold text-gray-900">
-            安心睡眠伙伴 - 你的睡前思绪整理助手
-          </h1>
         </div>
-        <TooltipProvider delayDuration={1000}>
-          <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowRecords(!showRecords)}
-                  className="lg:hidden"
-                  aria-label={showRecords ? '回到对话框' : '查看思绪记录'}
-                >
-                  <Image
-                    src={showRecords ? '/hide-records.png' : '/records.png'}
-                    alt={showRecords ? '回到对话框' : '查看思绪记录'}
-                    width={24}
-                    height={24}
-                    className="h-5 w-5"
-                    priority
-                  />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {showRecords ? '回到对话框' : '查看思绪记录'}
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleReset}
-                  aria-label="新聊天"
-                >
-                  <Image
-                    src="/new-chat.png"
-                    alt="新聊天"
-                    width={24}
-                    height={24}
-                    className="h-5 w-5"
-                    priority
-                  />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>新聊天</TooltipContent>
-            </Tooltip>
-          </div>
-        </TooltipProvider>
-      </header>
 
-      <div className="flex-1 overflow-hidden min-h-0">
-        <div className="h-full lg:grid lg:grid-cols-2 min-h-0">
-          <div className={`h-full border-r ${showRecords ? 'hidden lg:flex' : 'flex'} flex-col min-h-0`}>
-            <ChatBox
-              messages={state.conversationHistory}
-              onSendMessage={handleSendMessage}
-              isLoading={isLoading}
+        <header className="relative z-10 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-white">
+            <img 
+              src="/site-icon.png" 
+              alt="AI逆袭师" 
+              className="h-10 w-10 object-contain"
             />
+            <div>
+              <p className="text-lg font-semibold text-white leading-none">
+                AI · 逆袭师
+              </p>
+            </div>
           </div>
+          <nav className="hidden items-center gap-6 text-sm font-medium lg:flex">
+            <Link
+              href="/coach"
+              className="rounded-full border border-white px-4 py-2 text-sm font-semibold transition hover:bg-white hover:text-gray-900"
+            >
+              登录/注册
+            </Link>
+          </nav>
+        </header>
 
-          <div className={`h-full ${showRecords ? 'flex' : 'hidden lg:flex'} flex-col min-h-0`}>
-            <RecordsPanel categories={state.categories} />
+        <div className="mx-auto mb-16 max-w-3xl text-center flex-1 flex items-center justify-center">
+          <div className="space-y-10 translate-y-[10vh]">
+            <h1 className="text-4xl font-semibold leading-[48px] text-white sm:text-5xl sm:leading-[60px] lg:text-6xl lg:leading-[72px]">
+              AI逆袭师<br />你的人生重启教练
+            </h1>
+            <p className="text-lg text-gray-200">
+              将复杂的情绪、待办与困惑交给 AI 逆袭师，跨越焦虑与犹豫，制定可执行的重启策略，帮助你实现真正突破，不再原地打转。
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <Link
+                href="/coach"
+                className="rounded-full bg-indigo-500 px-6 py-3 text-base font-semibold text-white shadow-lg transition hover:bg-indigo-400"
+              >
+                开始重启人生
+              </Link>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs text-indigo-200">
+              <div className="flex items-center gap-1">
+                <span className="text-xl text-indigo-300">✓</span>
+                <span>7×24小时全天候陪伴</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xl text-indigo-300">✓</span>
+                <span>免费即刻开启</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xl text-indigo-300">✓</span>
+                <span>个性化指导与行动规划</span>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <div className="absolute inset-x-0 bottom-[-16rem] -z-10 transform-gpu blur-3xl">
+          <div
+            className="mx-auto aspect-[1155/678] w-[72.1875rem] bg-gradient-to-br from-[#4ade80] to-[#0ea5e9] opacity-30"
+            style={{
+              clipPath:
+                'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)'
+            }}
+          />
         </div>
       </div>
+
+      <section id="features" className="relative z-10 px-6 pb-16 pt-10 lg:px-8">
+        <div className="mx-auto grid max-w-5xl gap-8 md:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-left">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-200">
+              思维整理
+            </p>
+            <p className="mt-3 text-lg font-semibold text-white">
+              倾听与复盘
+            </p>
+            <p className="mt-2 text-sm text-gray-300">
+              把睡前纠结、待办、愿望等统一导入 AI 逆袭师，匹配适合的引导与解决路径。
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-left">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-200">
+              拓展视角
+            </p>
+            <p className="mt-3 text-lg font-semibold text-white">
+              多角度策略
+            </p>
+            <p className="mt-2 text-sm text-gray-300">
+              结合角色模型、场景扮演、时间轴让你看到潜在突破口，提升决策信心。
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-left">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-200">
+              行为重启
+            </p>
+            <p className="mt-3 text-lg font-semibold text-white">
+              与行动同步
+            </p>
+            <p className="mt-2 text-sm text-gray-300">
+              结合代办与心理模型，输出可执行计划，记录进展并在下一次对话复盘。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="about" className="relative z-10 px-6 pb-16 lg:px-8">
+        <div className="mx-auto max-w-4xl rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/0 p-8 text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-indigo-200">
+            AI 逆袭师，一键重启人生
+          </p>
+          <p className="mt-4 text-xl font-semibold text-white">
+            通过开放式对话陪伴、任务清单引导和模型化复盘，让你从迷茫、焦虑中抽离，稳步迈向新的自己。
+          </p>
+          <p className="mt-4 text-base text-gray-200">
+            AI逆袭师集成多种心理工具与任务流程，仅需 5 分钟，就能帮你整理当下的困境和下一步行动，成为你的人生重启教练。
+          </p>
+          <div className="mt-8 flex items-center justify-center gap-4">
+            <Link
+              href="/coach"
+              className="rounded-full border border-white px-5 py-2 text-sm font-semibold text-white transition hover:bg-white hover:text-gray-900"
+            >
+              马上访问功能页
+            </Link>
+            <Link
+              href="/coach"
+              className="text-sm font-semibold text-gray-200 underline-offset-4 hover:text-white"
+            >
+              查看即刻体验
+            </Link>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
