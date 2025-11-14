@@ -2,32 +2,51 @@ import Link from 'next/link'
 
 export default function CTA() {
   return (
-    <section className="relative z-10 px-6 pb-16 lg:px-8">
-      <div className="mx-auto max-w-4xl rounded-3xl border border-gray-200 dark:border-white/10 bg-gradient-to-br from-gray-100 to-gray-50 dark:from-white/5 dark:to-white/0 p-8 text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-indigo-600 dark:text-indigo-200">
-          AI 逆袭师，一键重启人生
-        </p>
-        <p className="mt-4 text-xl font-semibold text-gray-900 dark:text-white">
-          通过开放式对话陪伴、任务清单引导和模型化复盘，让你从迷茫、焦虑中抽离，稳步迈向新的自己。
-        </p>
-        <p className="mt-4 text-base text-gray-600 dark:text-gray-200">
-          AI逆袭师集成多种心理工具与任务流程，仅需 5 分钟，就能帮你整理当下的困境和下一步行动，成为你的人生重启教练。
-        </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            href="/coach"
-            className="rounded-full border border-gray-900 dark:border-white px-5 py-2 text-sm font-semibold text-gray-900 dark:text-white transition hover:bg-gray-900 hover:text-white dark:hover:bg-white dark:hover:text-gray-900"
-          >
-            马上访问功能页
-          </Link>
-          <Link
-            href="/coach"
-            className="text-sm font-semibold text-gray-600 dark:text-gray-200 underline-offset-4 hover:text-gray-900 dark:hover:text-white"
-          >
-            查看即刻体验
-          </Link>
+    <div className="relative isolate overflow-hidden bg-white dark:bg-gray-900">
+      <div className="px-6 py-20 sm:py-28 lg:px-8">
+        <div className="mx-auto max-w-2xl text-center">
+          {/* 主标题 */}
+          <h2 className="text-4xl font-semibold tracking-tight leading-tight text-balance text-gray-900 sm:text-5xl sm:leading-tight dark:text-white">
+            从 摆烂 到 逆袭<br />现在开始重启人生
+          </h2>
+          
+          {/* 描述文字 */}
+          <p className="mx-auto mt-6 max-w-xl text-lg/8 text-pretty text-gray-600 dark:text-gray-300">
+            每一次深夜的自我怀疑，每一个被拖延的计划，都在消耗你的生命力。AI逆袭师用专业陪伴打破焦虑循环，7天带你找回掌控感。
+          </p>
+          
+          {/* 按钮组 */}
+          <div className="mt-10 flex items-center justify-center gap-x-6">
+            <Link
+              href="/coach"
+              className="rounded-full bg-indigo-600 px-6 py-3 text-base font-semibold text-white shadow-lg transition hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:focus-visible:outline-indigo-500"
+            >
+              立即开始重启
+            </Link>
+          </div>
         </div>
       </div>
-    </section>
+      
+      {/* 背景装饰渐变 - 与 Hero 保持一致的粉紫配色 */}
+      <svg
+        viewBox="0 0 1024 1024"
+        aria-hidden="true"
+        className="absolute top-1/2 left-1/2 -z-10 size-[64rem] -translate-x-1/2 [mask-image:radial-gradient(closest-side,white,transparent)]"
+      >
+        <circle
+          r="512"
+          cx="512"
+          cy="512"
+          fill="url(#cta-gradient)"
+          fillOpacity="0.5"
+        />
+        <defs>
+          <radialGradient id="cta-gradient">
+            <stop stopColor="#ff80b5" />
+            <stop offset="1" stopColor="#9089fc" />
+          </radialGradient>
+        </defs>
+      </svg>
+    </div>
   )
 }
