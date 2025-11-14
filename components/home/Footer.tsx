@@ -86,7 +86,7 @@ export default function Footer() {
 
           {/* 导航链接区域 - 右对齐 */}
           <nav className="flex-shrink-0 mr-10 lg:mr-20" aria-label="Footer">
-            <div className="grid grid-cols-1 gap-56 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-48 sm:grid-cols-3">
               {/* 产品 */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
