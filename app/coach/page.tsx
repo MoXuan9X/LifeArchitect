@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { MoreVertical } from 'lucide-react'
+import { MoreVertical, ChevronDown, ChevronRight, Trophy, Lock, CheckCircle2, Circle, Loader2, PieChart, ScanFace } from 'lucide-react'
 import WelcomeDialog from '@/components/WelcomeDialog'
 import AnalysisModal from '@/components/AnalysisModal'
 import { Message, AnalysisReport, ChatSession } from '@/lib/types'
@@ -86,6 +86,7 @@ export default function CoachPage() {
   const [currentReport, setCurrentReport] = useState<AnalysisReport | null>(null)
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<ChatSession | null>(null)
+  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true)
   
   // Refs
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -747,6 +748,113 @@ export default function CoachPage() {
             </button>
           </nav>
 
+          {/* Analysis Section */}
+          <div className="mt-2">
+             <button 
+                onClick={() => setIsAnalysisExpanded(!isAnalysisExpanded)}
+                className="flex items-center justify-between w-full rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-white/70 transition-colors group"
+             >
+                <div className="flex items-center gap-3">
+                  <ScanFace className="w-5 h-5 text-indigo-500" />
+                  <span>Analysis</span>
+                </div>
+             </button>
+             
+             {isAnalysisExpanded && (
+               <div className="relative mt-2 px-2">
+                 {/* Vertical Progress Line */}
+                 {(() => {
+                    const trackHeight = 'calc(100% - 24px)' 
+                    const progressRatio = messages.length >= 100 ? 1 : messages.length >= 80 ? 0.5 : 0
+                    return (
+                      <div className="absolute left-[35px] top-3 bottom-3 w-px bg-gray-200 z-0">
+                        <div 
+                          className="absolute top-0 left-0 w-full bg-indigo-500 transition-all duration-500"
+                          style={{ height: `${progressRatio * 100}%` }}
+                        />
+                      </div>
+                    )
+                  })()}
+
+                 <div className="space-y-1 relative z-10">
+                   {[
+                     { id: 'personality', title: 'Personality', target: 50, reportType: 'diagnosis' },
+                     { id: 'thought', title: 'Thought Pattern', target: 80, reportType: 'roadmap' },
+                     { id: 'blindspot', title: 'Blind-Spot', target: 100, reportType: null }
+                   ].map((item, index) => {
+                     const isUnlocked = messages.length >= item.target
+                     const prevTarget = index === 0 ? 0 : [50, 80, 100][index - 1]
+                     const isInProgress = !isUnlocked && messages.length >= prevTarget
+                     
+                     return (
+                       <button 
+                         key={item.id}
+                         onClick={() => {
+                           if (!isUnlocked) return
+                           const report = analysisReports.find(r => r.type === item.reportType)
+                           if (report) {
+                             setCurrentReport(report)
+                             setIsAnalysisModalOpen(true)
+                           } else {
+                             toast({ 
+                               title: '报告准备中', 
+                               description: '该阶段的分析报告尚未生成' 
+                             })
+                           }
+                         }}
+                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all text-left pl-11 relative group ${
+                           isUnlocked 
+                             ? 'bg-transparent text-indigo-900 cursor-pointer hover:bg-white' 
+                             : isInProgress
+                               ? 'bg-transparent text-gray-800 cursor-default'
+                               : 'bg-transparent text-gray-400 cursor-default opacity-80'
+                         }`}
+                         disabled={!isUnlocked}
+                       >
+                         {/* Custom Icon Indicator - Centered on line at ~35px */}
+                         <div className={`absolute left-[27px] top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-colors z-20 bg-[#F9FAFF] ${
+                           isUnlocked && 'group-hover:bg-white'
+                         }`}>
+                           {isUnlocked ? (
+                             <CheckCircle2 className="w-4 h-4 text-indigo-500 fill-indigo-50" />
+                           ) : isInProgress ? (
+                             <div className="relative">
+                               <div className="absolute inset-0 bg-indigo-100 rounded-full animate-ping opacity-20"></div>
+                               <Circle className="w-4 h-4 text-indigo-500 fill-indigo-100" />
+                               <div className="absolute inset-0 flex items-center justify-center">
+                                 <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
+                               </div>
+                             </div>
+                           ) : (
+                             <Lock className="w-3.5 h-3.5 text-gray-300" />
+                           )}
+                         </div>
+
+                         <span className={`text-xs font-medium truncate ${
+                           isUnlocked ? 'font-bold' : ''
+                         }`}>
+                           {item.title}
+                         </span>
+                         
+                         <div className="text-[10px] font-medium ml-2 shrink-0">
+                           {isUnlocked ? (
+                             <ChevronRight className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-600 transition-colors" />
+                           ) : isInProgress ? (
+                             <span className="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md">
+                               {messages.length}/{item.target} msgs
+                             </span>
+                           ) : (
+                             <span className="text-gray-400">{item.target} msgs</span>
+                           )}
+                         </div>
+                       </button>
+                     )
+                   })}
+                 </div>
+               </div>
+             )}
+          </div>
+
           {/* History Chats and Analysis */}
           <div className="mt-6 flex-grow overflow-y-auto">
             <h3 className="px-3 text-xs font-semibold uppercase tracking-wider text-gray-500">CHAT</h3>
@@ -816,91 +924,6 @@ export default function CoachPage() {
             </div>
           </div>
 
-          {/* Analysis Progress */}
-          <div className="mt-6 mb-8 px-1">
-            <h3 className="px-2 text-xs font-semibold uppercase tracking-wider text-gray-500 mb-4">Analysis</h3>
-            <div className="relative pl-4">
-              {/* Continuous vertical progress line from first to third circle centers */}
-              {(() => {
-                const trackHeight = 'calc(100% - 1rem)' // subtract first + last circle radius (0.5rem each)
-                const progressRatio = messages.length >= 100 ? 1 : messages.length >= 80 ? 0.5 : 0
-                return (
-                  <>
-                    <div
-                      className="absolute left-[23px] w-0.5 bg-gray-200"
-                      style={{
-                        top: '0.5rem',
-                        height: trackHeight
-                      }}
-                    />
-                    <div
-                      className="absolute left-[23px] w-0.5 bg-indigo-500 transition-all duration-500"
-                      style={{
-                        top: '0.5rem',
-                        height: `calc(${progressRatio} * (${trackHeight}))`
-                      }}
-                    />
-                  </>
-                )
-              })()}
-
-              <div className="space-y-6">
-                {/* Item 1: Personality Analysis */}
-                <div className="relative flex items-center group">
-                  <div className={`absolute left-0 w-4 h-4 rounded-full border-2 z-10 bg-white ${
-                    messages.length >= 50 ? 'border-indigo-500' : 'border-gray-300'
-                  }`}>
-                    {messages.length >= 50 && <div className="w-2 h-2 bg-indigo-500 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />}
-                  </div>
-                  <div className="ml-8 w-full flex items-center justify-between">
-                    <div>
-                      <div className={`text-sm font-medium mb-0.5 ${
-                        messages.length >= 50 ? 'text-gray-800' : 'text-gray-400'
-                      }`}>Personality Analysis</div>
-                      <p className="text-xs text-gray-400">性格分析</p>
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">50</span>
-                  </div>
-                </div>
-
-                {/* Item 2: Thought Pattern */}
-                <div className="relative flex items-center group">
-                  <div className={`absolute left-0 w-4 h-4 rounded-full border-2 z-10 bg-white ${
-                    messages.length >= 80 ? 'border-indigo-500' : 'border-gray-300'
-                  }`}>
-                    {messages.length >= 80 && <div className="w-2 h-2 bg-indigo-500 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />}
-                  </div>
-                  <div className="ml-8 w-full flex items-center justify-between">
-                    <div>
-                      <div className={`text-sm font-medium mb-0.5 ${
-                        messages.length >= 80 ? 'text-gray-800' : 'text-gray-400'
-                      }`}>Thought Pattern</div>
-                      <p className="text-xs text-gray-400">思维模式</p>
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">80</span>
-                  </div>
-                </div>
-
-                {/* Item 3: Blind-Spot Analysis */}
-                <div className="relative flex items-center group">
-                  <div className={`absolute left-0 w-4 h-4 rounded-full border-2 z-10 bg-white ${
-                    messages.length >= 100 ? 'border-indigo-500' : 'border-gray-300'
-                  }`}>
-                    {messages.length >= 100 && <div className="w-2 h-2 bg-indigo-500 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />}
-                  </div>
-                  <div className="ml-8 w-full flex items-center justify-between">
-                    <div>
-                      <div className={`text-sm font-medium mb-0.5 ${
-                        messages.length >= 100 ? 'text-gray-800' : 'text-gray-400'
-                      }`}>Blind-Spot Analysis</div>
-                      <p className="text-xs text-gray-400">盲点分析</p>
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">100</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* Bottom User Info */}
           <div className="mt-auto pt-4 border-t border-indigo-100/80">
@@ -937,7 +960,7 @@ export default function CoachPage() {
         <main className="flex flex-1 flex-col bg-transparent relative">
           {/* Header */}
           <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200/80 px-8 backdrop-blur-sm z-10">
-            <h1 className="text-xl font-bold text-gray-900">AI逆袭师</h1>
+            {/* Title removed */}
           </header>
 
           {/* Messages Area */}
