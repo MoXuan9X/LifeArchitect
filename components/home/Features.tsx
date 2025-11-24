@@ -34,8 +34,17 @@ const featureCards: Feature[] = [
 
 export default function Features() {
   return (
-    <section id="features" className="relative z-8 bg-white dark:bg-gray-900 py-18 sm:py-10">
+    <section id="features" className="relative z-10 bg-white dark:bg-gray-900 py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
+        {/* 区块标题 */}
+        <div className="mx-auto max-w-2xl text-center mb-16">
+          <h2 className="text-base font-semibold leading-7 text-indigo-600 dark:text-indigo-400">
+            三大核心功能
+          </h2>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl dark:text-white">
+            全方位陪伴你的人生重启之旅
+          </p>
+        </div>
 
         {/* 功能卡片网格 */}
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-3">

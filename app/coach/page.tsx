@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { MoreVertical } from 'lucide-react'
+import { MoreVertical, ChevronDown, ChevronRight, Trophy } from 'lucide-react'
 import WelcomeDialog from '@/components/WelcomeDialog'
 import AnalysisModal from '@/components/AnalysisModal'
 import { Message, AnalysisReport, ChatSession } from '@/lib/types'
@@ -96,6 +96,8 @@ export default function CoachPage() {
   const shouldTranscribeRef = useRef(false)
   const { toast } = useToast()
   const activeSessionIdRef = useRef<string>('')
+
+  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(false)
 
   // Derived state
   const isCurrentSessionLoading = messages.length > 0 && messages[messages.length - 1].role === 'assistant' && !!messages[messages.length - 1].isStreaming
@@ -735,7 +737,7 @@ export default function CoachPage() {
             </div>
           )}
 
-          <nav className="mt-8 space-y-2">
+          <nav className="mt-8 space-y-4">
             <button 
               onClick={createNewSession}
               className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-white/70 w-full text-left transition-colors"
@@ -745,163 +747,189 @@ export default function CoachPage() {
               </svg>
               <span>New Chat</span>
             </button>
+
+            {/* Analysis Journey Card */}
+            <div className="rounded-xl bg-white shadow-sm border border-indigo-50 overflow-hidden transition-all duration-300">
+              <button
+                onClick={() => setIsAnalysisExpanded(!isAnalysisExpanded)}
+                className="w-full p-3 flex items-center gap-3 hover:bg-gray-50/50 transition-colors"
+              >
+                <div className="h-8 w-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                  <Trophy className="w-4 h-4" />
+                </div>
+                <div className="flex-1 text-left min-w-0">
+                  <div className="text-xs font-bold text-indigo-900 uppercase tracking-wide mb-0.5">Analysis Journey</div>
+                  <div className="text-[10px] text-gray-500 truncate">
+                    {messages.length < 50 ? `Next: Personality (${messages.length}/50)` :
+                     messages.length < 80 ? `Next: Thought Pattern (${messages.length}/80)` :
+                     messages.length < 100 ? `Next: Blind-Spot (${messages.length}/100)` :
+                     'Analysis Completed'}
+                  </div>
+                </div>
+                {isAnalysisExpanded ? (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                )}
+              </button>
+              
+              {/* Expanded Content */}
+              {isAnalysisExpanded && (
+                <div className="px-3 pb-4 pt-1 space-y-4">
+                  {/* Progress Bar */}
+                  <div className="relative h-1 bg-gray-100 rounded-full overflow-hidden">
+                    <div 
+                      className="absolute left-0 top-0 h-full bg-indigo-500 transition-all duration-500 rounded-full"
+                      style={{ 
+                        width: `${Math.min(100, (messages.length / 100) * 100)}%` 
+                      }}
+                    />
+                  </div>
+
+                  {/* Analysis Items */}
+                  <div className="relative pl-2 pt-2">
+                    {/* Vertical Line - connects the dots */}
+                    <div className="absolute left-[11px] top-3 bottom-6 w-0.5 bg-gray-100" />
+
+                    <div className="space-y-6">
+                      {/* Item 1: Personality Analysis */}
+                      <div className="relative flex items-start group">
+                        <div className={`absolute left-0 top-1.5 w-2.5 h-2.5 rounded-full border-2 z-10 bg-white transition-colors ${
+                          messages.length >= 50 ? 'border-indigo-500' : 'border-gray-300'
+                        }`} />
+                        <div className="w-full pl-6 pr-2">
+                          <button 
+                            className={`w-full text-left transition-colors rounded-lg px-2 py-1 ${
+                              messages.length >= 50 
+                                ? 'hover:bg-indigo-50/50 cursor-pointer' 
+                                : 'opacity-50 cursor-not-allowed'
+                            }`}
+                            disabled={messages.length < 50}
+                          >
+                            <div className={`text-xs font-bold ${
+                              messages.length >= 50 ? 'text-gray-700' : 'text-gray-400'
+                            }`}>Personality Analysis</div>
+                            <div className="text-[10px] text-gray-400 font-medium mt-0.5">50 messages</div>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Item 2: Thought Pattern */}
+                      <div className="relative flex items-start group">
+                        <div className={`absolute left-0 top-1.5 w-2.5 h-2.5 rounded-full border-2 z-10 bg-white transition-colors ${
+                          messages.length >= 80 ? 'border-indigo-500' : 'border-gray-300'
+                        }`} />
+                        <div className="w-full pl-6 pr-2">
+                          <button 
+                            className={`w-full text-left transition-colors rounded-lg px-2 py-1 ${
+                              messages.length >= 80 
+                                ? 'hover:bg-indigo-50/50 cursor-pointer' 
+                                : 'opacity-50 cursor-not-allowed'
+                            }`}
+                            disabled={messages.length < 80}
+                          >
+                            <div className={`text-xs font-bold ${
+                              messages.length >= 80 ? 'text-gray-700' : 'text-gray-400'
+                            }`}>Thought Pattern</div>
+                            <div className="text-[10px] text-gray-400 font-medium mt-0.5">80 messages</div>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Item 3: Blind-Spot Analysis */}
+                      <div className="relative flex items-start group">
+                        <div className={`absolute left-0 top-1.5 w-2.5 h-2.5 rounded-full border-2 z-10 bg-white transition-colors ${
+                          messages.length >= 100 ? 'border-indigo-500' : 'border-gray-300'
+                        }`} />
+                        <div className="w-full pl-6 pr-2">
+                          <button 
+                            className={`w-full text-left transition-colors rounded-lg px-2 py-1 ${
+                              messages.length >= 100 
+                                ? 'hover:bg-indigo-50/50 cursor-pointer' 
+                                : 'opacity-50 cursor-not-allowed'
+                            }`}
+                            disabled={messages.length < 100}
+                          >
+                            <div className={`text-xs font-bold ${
+                              messages.length >= 100 ? 'text-gray-700' : 'text-gray-400'
+                            }`}>Blind-Spot Analysis</div>
+                            <div className="text-[10px] text-gray-400 font-medium mt-0.5">100 messages</div>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </nav>
 
           {/* History Chats and Analysis */}
           <div className="mt-6 flex-grow overflow-y-auto">
             <h3 className="px-3 text-xs font-semibold uppercase tracking-wider text-gray-500">CHAT</h3>
-            <div className="mt-4 space-y-4">
-              {Object.entries(groupedSessions).map(([dateLabel, sessionGroup]) => (
-                <div key={dateLabel} className="space-y-1">
-                  <p className="px-3 py-1 text-sm font-medium text-gray-600">{dateLabel}</p>
-                  {sessionGroup.map((session) => (
-                    <div key={session.id} className="relative">
-                        <div className="group relative">
+            <div className="mt-4 space-y-1">
+              {[...sessions]
+                .sort((a, b) => b.lastUpdated - a.lastUpdated)
+                .map((session) => (
+                  <div key={session.id} className="relative">
+                    <div className="group relative">
+                      <button
+                        onClick={() => loadSession(session)}
+                        className={`block rounded-lg w-full text-left px-3 py-2 text-sm truncate transition-colors pr-8 ${
+                          currentSessionId === session.id
+                            ? 'bg-indigo-500/10 text-indigo-900 font-medium'
+                            : 'text-gray-600 hover:bg-white/70'
+                        }`}
+                      >
+                        {session.title}
+                      </button>
+                      {canDeleteSessions && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSessionToDelete(session)
+                          }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all text-sm font-bold leading-none"
+                          title="删除会话"
+                          aria-label="删除会话"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    
+                    {/* Session Analysis Reports */}
+                    {session.id === currentSessionId && session.analysisReports && session.analysisReports.length > 0 && (
+                      <div className="ml-4 pl-2 border-l border-indigo-100 space-y-1 mt-1">
+                        {[...session.analysisReports]
+                          .sort((a, b) => {
+                            // Sort: diagnosis (问题分析) first, then roadmap (行动路线)
+                            if (a.type === 'diagnosis' && b.type === 'roadmap') return -1
+                            if (a.type === 'roadmap' && b.type === 'diagnosis') return 1
+                            return 0
+                          })
+                          .map((report) => (
                             <button
-                                onClick={() => loadSession(session)}
-                                className={`block rounded-lg w-full text-left px-3 py-2 text-sm truncate transition-colors pr-8 ${
-                                currentSessionId === session.id
-                                    ? 'bg-indigo-500/10 text-indigo-900 font-medium'
-                                    : 'text-gray-600 hover:bg-white/70'
-                                }`}
+                              key={report.id}
+                              onClick={() => {
+                                // Switch to this session if needed
+                                if (currentSessionId !== session.id) {
+                                  loadSession(session)
+                                }
+                                // Open report modal
+                                setCurrentReport(report)
+                                setIsAnalysisModalOpen(true)
+                              }}
+                              className="flex items-center gap-2 w-full px-2 py-1 text-xs text-left text-gray-500 hover:text-indigo-600 hover:bg-white/50 rounded transition-colors truncate"
                             >
-                                {session.title}
+                              <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${report.type === 'diagnosis' ? 'bg-blue-400' : 'bg-green-400'}`}></div>
+                              <span className="truncate">{report.type === 'diagnosis' ? '问题分析' : '行动路线'}</span>
                             </button>
-                            {canDeleteSessions && (
-                                <button
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    setSessionToDelete(session)
-                                }}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all text-sm font-bold leading-none"
-                                title="删除会话"
-                                aria-label="删除会话"
-                                >
-                                ×
-                                </button>
-                            )}
-                        </div>
-                        
-                        {/* Session Analysis Reports */}
-                        {session.id === currentSessionId && session.analysisReports && session.analysisReports.length > 0 && (
-                            <div className="ml-4 pl-2 border-l border-indigo-100 space-y-1 mt-1">
-                                {[...session.analysisReports]
-                                    .sort((a, b) => {
-                                        // Sort: diagnosis (问题分析) first, then roadmap (行动路线)
-                                        if (a.type === 'diagnosis' && b.type === 'roadmap') return -1
-                                        if (a.type === 'roadmap' && b.type === 'diagnosis') return 1
-                                        return 0
-                                    })
-                                    .map((report) => (
-                                    <button
-                                        key={report.id}
-                                        onClick={() => {
-                                            // Switch to this session if needed
-                                            if (currentSessionId !== session.id) {
-                                                loadSession(session)
-                                            }
-                                            // Open report modal
-                                            setCurrentReport(report)
-                                            setIsAnalysisModalOpen(true)
-                                        }}
-                                        className="flex items-center gap-2 w-full px-2 py-1 text-xs text-left text-gray-500 hover:text-indigo-600 hover:bg-white/50 rounded transition-colors truncate"
-                                    >
-                                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${report.type === 'diagnosis' ? 'bg-blue-400' : 'bg-green-400'}`}></div>
-                                        <span className="truncate">{report.type === 'diagnosis' ? '问题分析' : '行动路线'}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                  ))}
-                </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
               ))}
-            </div>
-          </div>
-
-          {/* Analysis Progress */}
-          <div className="mt-6 mb-8 px-1">
-            <h3 className="px-2 text-xs font-semibold uppercase tracking-wider text-gray-500 mb-4">Analysis</h3>
-            <div className="relative pl-4">
-              {/* Continuous vertical progress line from first to third circle centers */}
-              {(() => {
-                const trackHeight = 'calc(100% - 1rem)' // subtract first + last circle radius (0.5rem each)
-                const progressRatio = messages.length >= 100 ? 1 : messages.length >= 80 ? 0.5 : 0
-                return (
-                  <>
-                    <div
-                      className="absolute left-[23px] w-0.5 bg-gray-200"
-                      style={{
-                        top: '0.5rem',
-                        height: trackHeight
-                      }}
-                    />
-                    <div
-                      className="absolute left-[23px] w-0.5 bg-indigo-500 transition-all duration-500"
-                      style={{
-                        top: '0.5rem',
-                        height: `calc(${progressRatio} * (${trackHeight}))`
-                      }}
-                    />
-                  </>
-                )
-              })()}
-
-              <div className="space-y-6">
-                {/* Item 1: Personality Analysis */}
-                <div className="relative flex items-center group">
-                  <div className={`absolute left-0 w-4 h-4 rounded-full border-2 z-10 bg-white ${
-                    messages.length >= 50 ? 'border-indigo-500' : 'border-gray-300'
-                  }`}>
-                    {messages.length >= 50 && <div className="w-2 h-2 bg-indigo-500 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />}
-                  </div>
-                  <div className="ml-8 w-full flex items-center justify-between">
-                    <div>
-                      <div className={`text-sm font-medium mb-0.5 ${
-                        messages.length >= 50 ? 'text-gray-800' : 'text-gray-400'
-                      }`}>Personality Analysis</div>
-                      <p className="text-xs text-gray-400">性格分析</p>
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">50</span>
-                  </div>
-                </div>
-
-                {/* Item 2: Thought Pattern */}
-                <div className="relative flex items-center group">
-                  <div className={`absolute left-0 w-4 h-4 rounded-full border-2 z-10 bg-white ${
-                    messages.length >= 80 ? 'border-indigo-500' : 'border-gray-300'
-                  }`}>
-                    {messages.length >= 80 && <div className="w-2 h-2 bg-indigo-500 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />}
-                  </div>
-                  <div className="ml-8 w-full flex items-center justify-between">
-                    <div>
-                      <div className={`text-sm font-medium mb-0.5 ${
-                        messages.length >= 80 ? 'text-gray-800' : 'text-gray-400'
-                      }`}>Thought Pattern</div>
-                      <p className="text-xs text-gray-400">思维模式</p>
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">80</span>
-                  </div>
-                </div>
-
-                {/* Item 3: Blind-Spot Analysis */}
-                <div className="relative flex items-center group">
-                  <div className={`absolute left-0 w-4 h-4 rounded-full border-2 z-10 bg-white ${
-                    messages.length >= 100 ? 'border-indigo-500' : 'border-gray-300'
-                  }`}>
-                    {messages.length >= 100 && <div className="w-2 h-2 bg-indigo-500 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />}
-                  </div>
-                  <div className="ml-8 w-full flex items-center justify-between">
-                    <div>
-                      <div className={`text-sm font-medium mb-0.5 ${
-                        messages.length >= 100 ? 'text-gray-800' : 'text-gray-400'
-                      }`}>Blind-Spot Analysis</div>
-                      <p className="text-xs text-gray-400">盲点分析</p>
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">100</span>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
