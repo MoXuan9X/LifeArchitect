@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { MoreVertical, ChevronDown, ChevronRight, Trophy, Lock, CheckCircle2, Circle, Loader2, PieChart, ScanFace } from 'lucide-react'
+import { MoreVertical, ChevronDown, ChevronRight, Trophy, Lock, CheckCircle2, Circle, Loader2, PieChart, ScanFace, Zap, Sparkles } from 'lucide-react'
 import WelcomeDialog from '@/components/WelcomeDialog'
 import AnalysisModal from '@/components/AnalysisModal'
 import { Message, AnalysisReport, ChatSession } from '@/lib/types'
@@ -34,7 +34,16 @@ const LEGACY_SESSIONS_STORAGE_KEY = 'chatSessions'
 const DEFAULT_USER_ID = 'guest-user'
 const SHOW_SEARCH = false
 
-type SessionStore = Record<string, ChatSession[]>
+type SessionStore = Record<string, ChatSession[] | undefined | null>
+
+const dedupeReports = (reports: AnalysisReport[] = []) => {
+  const seen = new Set<string>()
+  return reports.filter(report => {
+    if (seen.has(report.id)) return false
+    seen.add(report.id)
+    return true
+  })
+}
 
 const parseSessionsMapString = (raw: string | null): SessionStore => {
   if (!raw) return {}
@@ -45,7 +54,30 @@ const parseSessionsMapString = (raw: string | null): SessionStore => {
     }
     if (parsed && typeof parsed === 'object') {
       return Object.entries(parsed).reduce((acc, [userId, value]) => {
-        acc[userId] = Array.isArray(value) ? value as ChatSession[] : []
+        // Handle legacy shapes:
+        // - Array of sessions
+        // - Object with { sessions, analysisReports }
+        if (Array.isArray(value)) {
+          acc[userId] = value as ChatSession[]
+        } else if (value && typeof value === 'object' && Array.isArray((value as any).sessions)) {
+          const sessions = (value as any).sessions as ChatSession[]
+          const extraReports = Array.isArray((value as any).analysisReports) ? dedupeReports((value as any).analysisReports) : []
+          if (extraReports.length > 0 && sessions.length > 0) {
+            // Attach any previously stored user-level reports to the most recent session to avoid data loss
+            const targetIndex = sessions.reduce((bestIndex, s, idx, arr) => {
+              if (!arr[bestIndex]) return idx
+              return (s.lastUpdated || 0) > (arr[bestIndex].lastUpdated || 0) ? idx : bestIndex
+            }, 0)
+            const targetSession = sessions[targetIndex] || sessions[0]
+            sessions[targetIndex] = {
+              ...targetSession,
+              analysisReports: dedupeReports([...(targetSession.analysisReports || []), ...extraReports])
+            }
+          }
+          acc[userId] = sessions
+        } else {
+          acc[userId] = []
+        }
         return acc
       }, {} as SessionStore)
     }
@@ -87,6 +119,38 @@ export default function CoachPage() {
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<ChatSession | null>(null)
   const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true)
+
+  const totalUserMessageCount = useMemo(() => {
+    return sessions.reduce((sum, session) => {
+      return sum + session.messages.filter(m => m.role === 'user').length
+    }, 0)
+  }, [sessions])
+
+  // Watch for newly unlocked stages
+  useEffect(() => {
+    // Check if we have any *newly* unlocked stages that are not in our read history
+    // For simplicity, we'll check if we have a new report generated that is unread
+    const hasNewUnreadReport = analysisReports.some(r => !r.isRead)
+    
+      if (hasNewUnreadReport) {
+        // Play success sound
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3') // Success / Achievement sound
+        audio.volume = 0.6
+        audio.play().catch(e => console.log('Audio play failed', e))
+      }
+    }, [analysisReports]) // Trigger when reports update
+
+  // Mark reports as read when expanding analysis section
+  useEffect(() => {
+    if (isAnalysisExpanded && analysisReports.some(r => !r.isRead)) {
+      const updatedReports = analysisReports.map(r => ({ ...r, isRead: true }))
+      setAnalysisReports(updatedReports)
+      
+      if (currentSessionId) {
+        updateSession(currentSessionId, { analysisReports: updatedReports })
+      }
+    }
+  }, [isAnalysisExpanded, analysisReports])
   
   // Refs
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -122,7 +186,7 @@ export default function CoachPage() {
 
     const initializeSessions = () => {
       const store = loadSessionsStore()
-      const userSessions = store[currentUserId] || []
+      const userSessions = (store[currentUserId] || []) as ChatSession[]
       setSessions(userSessions)
       
       if (userSessions.length > 0) {
@@ -395,21 +459,36 @@ export default function CoachPage() {
         timestamp: Date.now()
       }
       finalMessages = [...newMessages, assistantMessage]
-      
       // Update session with complete exchange
-      updateSession(sendingSessionId, { messages: finalMessages })
+      let updatedSessions: ChatSession[] = []
+      setSessions(prev => {
+        updatedSessions = prev.map(session => {
+          if (session.id === sendingSessionId) {
+            return { ...session, messages: finalMessages, lastUpdated: Date.now() }
+          }
+          return session
+        })
+        return updatedSessions
+      })
 
-      // Check for analysis triggers
-      const assistantMessageCount = finalMessages.filter(m => m.role === 'assistant').length
-      if (assistantMessageCount === 5) {
-        generateAnalysis(sendingSessionId, finalMessages, 'diagnosis')
-      } else if (assistantMessageCount === 10) {
-        generateAnalysis(sendingSessionId, finalMessages, 'roadmap')
+      // Check for analysis triggers based on user's total message count (exclude assistant)
+      const activeSessionAfterUpdate = updatedSessions.find(s => s.id === sendingSessionId)
+      const sessionReports = activeSessionAfterUpdate?.analysisReports || []
+      const sessionHistory = activeSessionAfterUpdate?.messages || []
+      const sessionUserMessageCount = sessionHistory.filter(m => m.role === 'user').length
+      
+      // Per-session triggers
+      if (sessionUserMessageCount >= 5 && !sessionReports.some(r => r.type === 'diagnosis')) {
+        generateAnalysis(sendingSessionId, sessionHistory, 'diagnosis')
+      }
+      
+      if (sessionUserMessageCount >= 10 && !sessionReports.some(r => r.type === 'roadmap')) {
+        generateAnalysis(sendingSessionId, sessionHistory, 'roadmap')
       }
 
       // Generate title if it's a new session (e.g., 2nd user message)
       const userMessageCount = finalMessages.filter(m => m.role === 'user').length
-      const session = sessions.find(s => s.id === sendingSessionId)
+      const session = updatedSessions.find(s => s.id === sendingSessionId) || sessions.find(s => s.id === sendingSessionId)
       if (session && session.title === '新会话' && userMessageCount >= 1) {
         generateTitle(sendingSessionId, finalMessages)
       }
@@ -463,19 +542,19 @@ export default function CoachPage() {
   const generateAnalysis = async (sessionId: string, history: Message[], type: 'diagnosis' | 'roadmap') => {
     try {
       const report = await generateAnalysisReport(history, type)
-      
-      // Save report to session
+
+      // Save report to the specific session
       setSessions(prev => prev.map(session => {
         if (session.id === sessionId) {
-          const updatedReports = [report, ...(session.analysisReports || [])]
-          return { ...session, analysisReports: updatedReports }
+          const nextReports = dedupeReports([report, ...(session.analysisReports || [])])
+          return { ...session, analysisReports: nextReports }
         }
         return session
       }))
-      
-      // Only show modal if we are on the active session
+
+      // If this session is active, update local report state and show modal
       if (activeSessionIdRef.current === sessionId) {
-        setAnalysisReports(prev => [report, ...prev])
+        setAnalysisReports(prev => dedupeReports([report, ...prev]))
         setCurrentReport(report)
         setIsAnalysisModalOpen(true)
         
@@ -484,12 +563,12 @@ export default function CoachPage() {
             description: type === 'diagnosis' ? '查看您的问题诊断报告' : '查看您的行动路线图',
         })
       } else {
-          // Optional: toast notification for background completion?
           toast({
             title: '新的分析报告已生成',
             description: '请切换回该会话查看报告',
         })
       }
+
 
     } catch (error) {
       console.error('Error generating analysis:', error)
@@ -758,6 +837,37 @@ export default function CoachPage() {
                   <ScanFace className="w-5 h-5 text-indigo-500" />
                   <span>Analysis</span>
                 </div>
+                
+                {/* Status Indicators - Always visible */}
+                <div className="flex items-center gap-2">
+                  {analysisReports.length > 0 && analysisReports.some(r => !r.isRead) ? (
+                    <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold shadow-sm animate-bounce [animation-iteration-count:3]">
+                      +{analysisReports.filter(r => !r.isRead).length}
+                    </div>
+                  ) : (
+                    /* In-progress Count */
+                    (() => {
+                      const len = totalUserMessageCount
+                      if (len >= 100) return null
+                      
+                      const target = len < 50 ? 50 : len < 80 ? 80 : 100
+                      const remaining = target - len
+                      // Only show next target info if we don't have unread reports (handled by above condition)
+                      // But also, if we just finished one stage (e.g. 50), we wait for user to read report before showing next target?
+                      // User said: "收起之后呈现下一个报告的剩余消息数" implies after reading (expanding/collapsing), show next.
+                      // Since we toggle isRead on expand, this condition `!r.isRead` handles the switch naturally.
+
+                      return (
+                        <div className="flex items-center gap-1.5 bg-indigo-50/80 px-2.5 py-1 rounded-full">
+                          <Sparkles className="w-3 h-3 text-indigo-500 fill-indigo-500" />
+                          <span className="text-[10px] font-medium tracking-tight">
+                            <span className="font-bold text-indigo-600">{remaining}</span> <span className="text-indigo-400">msgs to unlock</span>
+                          </span>
+                        </div>
+                      )
+                    })()
+                  )}
+                </div>
              </button>
              
              {isAnalysisExpanded && (
@@ -765,7 +875,7 @@ export default function CoachPage() {
                  {/* Vertical Progress Line */}
                  {(() => {
                     const trackHeight = 'calc(100% - 24px)' 
-                    const progressRatio = messages.length >= 100 ? 1 : messages.length >= 80 ? 0.5 : 0
+                    const progressRatio = totalUserMessageCount >= 100 ? 1 : totalUserMessageCount >= 80 ? 0.5 : 0
                     return (
                       <div className="absolute left-[35px] top-3 bottom-3 w-px bg-gray-200 z-0">
                         <div 
@@ -782,9 +892,9 @@ export default function CoachPage() {
                      { id: 'thought', title: 'Thought Pattern', target: 80, reportType: 'roadmap' },
                      { id: 'blindspot', title: 'Blind-Spot', target: 100, reportType: null }
                    ].map((item, index) => {
-                     const isUnlocked = messages.length >= item.target
+                     const isUnlocked = totalUserMessageCount >= item.target
                      const prevTarget = index === 0 ? 0 : [50, 80, 100][index - 1]
-                     const isInProgress = !isUnlocked && messages.length >= prevTarget
+                     const isInProgress = !isUnlocked && totalUserMessageCount >= prevTarget
                      
                      return (
                        <button 
@@ -820,10 +930,7 @@ export default function CoachPage() {
                            ) : isInProgress ? (
                              <div className="relative">
                                <div className="absolute inset-0 bg-indigo-100 rounded-full animate-ping opacity-20"></div>
-                               <Circle className="w-4 h-4 text-indigo-500 fill-indigo-100" />
-                               <div className="absolute inset-0 flex items-center justify-center">
-                                 <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
-                               </div>
+                               <Lock className="w-3.5 h-3.5 text-indigo-500" />
                              </div>
                            ) : (
                              <Lock className="w-3.5 h-3.5 text-gray-300" />
@@ -836,14 +943,16 @@ export default function CoachPage() {
                            {item.title}
                          </span>
                          
-                         <div className="text-[10px] font-medium ml-2 shrink-0">
+                         <div className="text-[10px] font-medium ml-2 shrink-0 min-w-[60px] text-right">
                            {isUnlocked ? (
-                             <ChevronRight className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-600 transition-colors" />
+                             <div className="flex justify-end">
+                               <ChevronRight className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-600 transition-colors" />
+                             </div>
                            ) : isInProgress ? (
-                             <span className="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md">
-                               {messages.length}/{item.target} msgs
+                             <span className="text-indigo-600">
+                               {totalUserMessageCount}/{item.target} msgs
                              </span>
-                           ) : (
+                          ) : (
                              <span className="text-gray-400">{item.target} msgs</span>
                            )}
                          </div>
@@ -892,7 +1001,7 @@ export default function CoachPage() {
                         {/* Session Analysis Reports */}
                         {session.id === currentSessionId && session.analysisReports && session.analysisReports.length > 0 && (
                             <div className="ml-4 pl-2 border-l border-indigo-100 space-y-1 mt-1">
-                                {[...session.analysisReports]
+                                {[...(session.analysisReports || [])]
                                     .sort((a, b) => {
                                         // Sort: diagnosis (问题分析) first, then roadmap (行动路线)
                                         if (a.type === 'diagnosis' && b.type === 'roadmap') return -1
