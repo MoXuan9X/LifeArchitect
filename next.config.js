@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  // output: 'export', // 注释掉以支持 API 路由
   eslint: {
     ignoreDuringBuilds: true,
   },

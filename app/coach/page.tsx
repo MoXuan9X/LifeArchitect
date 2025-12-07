@@ -210,7 +210,74 @@ export default function CoachPage() {
   useEffect(() => {
     if (!hasHydratedSessions) return
     persistSessionsForUser(currentUserId, sessions)
+    
+    // Also sync to Supabase in the background
+    syncToSupabase(currentUserId, sessions)
   }, [sessions, currentUserId, hasHydratedSessions])
+
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null)
+
+  const syncToSupabase = async (userId: string, sessions: ChatSession[]) => {
+    try {
+      const response = await fetch('/api/sync-user-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, sessions })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        console.error('Sync to Supabase failed:', data)
+        throw new Error(data.error || 'Sync failed')
+      } else {
+        console.log('Successfully synced to Supabase:', data)
+        setLastSyncTime(Date.now())
+        return data
+      }
+    } catch (error) {
+      console.error('Error syncing to Supabase:', error)
+      throw error
+    }
+  }
+
+  const handleManualSync = async () => {
+    setIsSyncing(true)
+    try {
+      // 直接从 localStorage 读取最新数据，避免闭包问题
+      const store = loadSessionsStore()
+      const latestSessions = (store[currentUserId] || []) as ChatSession[]
+      
+      console.log(`[Manual Sync] User: ${currentUserId}, Sessions from state: ${sessions.length}, Sessions from storage: ${latestSessions.length}`)
+      
+      // 使用 localStorage 中的数据（更可靠）
+      const sessionsToSync = latestSessions.length > 0 ? latestSessions : sessions
+      
+      if (sessionsToSync.length === 0) {
+        toast({
+          title: '没有数据需要同步',
+          description: '本地没有找到会话记录',
+          variant: 'destructive'
+        })
+        return
+      }
+      
+      const result = await syncToSupabase(currentUserId, sessionsToSync)
+      toast({
+        title: '同步成功',
+        description: `已同步 ${result.synced} 个会话到云端`,
+      })
+    } catch (error) {
+      toast({
+        title: '同步失败',
+        description: error instanceof Error ? error.message : '请检查网络连接',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   // Auto-scroll logic
   const userScrolledRef = useRef(false)
@@ -1035,7 +1102,33 @@ export default function CoachPage() {
 
 
           {/* Bottom User Info */}
-          <div className="mt-auto pt-4 border-t border-indigo-100/80">
+          <div className="mt-auto pt-4 border-t border-indigo-100/80 space-y-3">
+            {/* Manual Sync Button */}
+            <button
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>同步中...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>同步到云端</span>
+                  {lastSyncTime && (
+                    <span className="text-gray-400">
+                      ({new Date(lastSyncTime).toLocaleTimeString()})
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+            
             <div className="flex items-center justify-between px-2">
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-500 flex items-center justify-center text-white font-semibold shadow-sm">
